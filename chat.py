@@ -5,8 +5,8 @@ from datetime import datetime
 
 # --- 1. SET PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="AI Assistant Pro",
-    page_icon="🤖",
+    page_title="StudyBuddy AI",
+    page_icon="📚",
     layout="centered",
     initial_sidebar_state="expanded"
 )
@@ -34,8 +34,16 @@ st.markdown("""
         background-color: #1e2127;
         padding: 15px;
         border-radius: 8px;
-        text-align: center;
         margin: 10px 0;
+    }
+    .subject-badge {
+        display: inline-block;
+        padding: 5px 10px;
+        margin: 2px;
+        border-radius: 15px;
+        background-color: #667eea;
+        color: white;
+        font-size: 12px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -44,156 +52,297 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = []
     
-if "conversation_count" not in st.session_state:
-    st.session_state.conversation_count = 0
+if "study_sessions" not in st.session_state:
+    st.session_state.study_sessions = 0
     
-if "bot_personality" not in st.session_state:
-    st.session_state.bot_personality = "friendly"
+if "questions_answered" not in st.session_state:
+    st.session_state.questions_answered = 0
     
-if "typing_speed" not in st.session_state:
-    st.session_state.typing_speed = 0.03
+if "current_subject" not in st.session_state:
+    st.session_state.current_subject = "General"
+    
+if "study_mode" not in st.session_state:
+    st.session_state.study_mode = "homework_help"
 
 # --- 4. SIDEBAR CONFIGURATION ---
 with st.sidebar:
-    st.title("⚙️ Settings")
+    st.title("📚 Study Settings")
     
-    # Bot personality selector
-    st.session_state.bot_personality = st.selectbox(
-        "Bot Personality",
-        ["friendly", "professional", "humorous", "philosophical"],
-        help="Choose how the bot responds"
+    # Study mode selector
+    st.session_state.study_mode = st.selectbox(
+        "Study Mode",
+        ["homework_help", "exam_prep", "concept_explanation", "quiz_me"],
+        format_func=lambda x: {
+            "homework_help": "📝 Homework Help",
+            "exam_prep": "📖 Exam Preparation",
+            "concept_explanation": "💡 Concept Explanation",
+            "quiz_me": "🎯 Quiz Me"
+        }[x]
     )
     
-    # Typing speed
-    st.session_state.typing_speed = st.slider(
-        "Response Speed",
-        min_value=0.01,
-        max_value=0.1,
-        value=0.03,
-        help="Adjust typing animation speed"
+    # Subject selector
+    st.session_state.current_subject = st.selectbox(
+        "Current Subject",
+        ["General", "Mathematics", "Science", "English", "History", "Programming", "Languages"],
+        help="Select your current study subject"
     )
     
-    # Chat statistics
+    # Study statistics
     st.markdown("---")
-    st.markdown("### 📊 Chat Stats")
-    st.markdown(f"""
-        <div class="stat-box">
-            <h3>{st.session_state.conversation_count}</h3>
-            <p>Messages Sent</p>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### 📊 Study Stats")
     
-    # Clear chat button
-    if st.button("🗑️ Clear Chat", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.conversation_count = 0
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"""
+            <div class="stat-box">
+                <h3>🎓 {st.session_state.study_sessions}</h3>
+                <p>Study Sessions</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+            <div class="stat-box">
+                <h3>💬 {st.session_state.questions_answered}</h3>
+                <p>Questions Asked</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Quick actions
+    st.markdown("---")
+    st.markdown("### ⚡ Quick Actions")
+    
+    if st.button("🎯 Start Study Session", use_container_width=True):
+        st.session_state.study_sessions += 1
+        welcome_msg = f"Great! Let's start a {st.session_state.current_subject} study session. What would you like to work on?"
+        st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
         st.rerun()
     
-    # Example prompts
+    if st.button("🗑️ Clear Chat", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+    
+    # Study tips and examples
     st.markdown("---")
-    st.markdown("### 💡 Try asking:")
-    example_prompts = [
-        "Tell me a joke",
-        "What can you help me with?",
-        "Explain quantum computing",
-        "Give me a creative writing prompt"
-    ]
-    for prompt in example_prompts:
-        if st.button(prompt, use_container_width=True):
+    st.markdown("### 💡 Example Questions")
+    
+    example_prompts = {
+        "Mathematics": [
+            "Help me solve quadratic equations",
+            "Explain calculus derivatives",
+            "How do I factor polynomials?"
+        ],
+        "Science": [
+            "Explain photosynthesis",
+            "What is Newton's third law?",
+            "Help me understand the periodic table"
+        ],
+        "English": [
+            "Help me write an essay outline",
+            "Explain metaphors and similes",
+            "Grammar tips for better writing"
+        ],
+        "Programming": [
+            "Explain Python loops",
+            "Help me debug my code",
+            "What are functions in programming?"
+        ],
+        "General": [
+            "Create a study schedule",
+            "Tips for better note-taking",
+            "How to prepare for exams"
+        ]
+    }
+    
+    current_examples = example_prompts.get(st.session_state.current_subject, example_prompts["General"])
+    for prompt in current_examples:
+        if st.button(prompt, use_container_width=True, key=prompt):
             st.session_state.messages.append({"role": "user", "content": prompt})
             st.rerun()
 
-# --- 5. ENHANCED BOT RESPONSE LOGIC ---
-def generate_response(prompt, personality="friendly"):
+# --- 5. STUDENT-FOCUSED RESPONSE LOGIC ---
+def generate_student_response(prompt, subject, mode):
     """
-    Generates contextually aware responses based on personality and input.
+    Generates educational responses tailored for students.
     """
     prompt_lower = prompt.lower()
     
-    # Personality-based response modifiers
-    personalities = {
-        "friendly": {
-            "greeting": "Hey there! 👋 How can I brighten your day?",
-            "unknown": "That's a fascinating topic! I'd love to explore that with you. 🤔"
-        },
-        "professional": {
-            "greeting": "Good day. How may I assist you?",
-            "unknown": "I acknowledge your inquiry. Could you provide more specifics?"
-        },
-        "humorous": {
-            "greeting": "Well, well, well... look who's here! 😄",
-            "unknown": "Hmm, my humor circuits are struggling with that one! 🤖"
-        },
-        "philosophical": {
-            "greeting": "Greetings, seeker of knowledge. What wisdom do you pursue?",
-            "unknown": "An intriguing question that leads us down the rabbit hole of existence..."
-        }
-    }
-    
-    # Context-aware responses
-    if any(word in prompt_lower for word in ["hello", "hi", "hey", "greetings"]):
-        return personalities[personality]["greeting"]
-    
-    elif "name" in prompt_lower:
-        return f"I'm your AI Assistant Pro! Currently in {personality} mode. 🤖"
-    
-    elif any(word in prompt_lower for word in ["joke", "funny", "laugh"]):
-        jokes = [
-            "Why don't scientists trust atoms? Because they make up everything! 😄",
-            "I told my computer I needed a break, and now it won't stop sending me Kit-Kat ads! 🍫",
-            "Why did the programmer quit his job? He didn't get arrays! 💻",
-            "What's a computer's favorite snack? Microchips! 🖥️"
+    # Greetings
+    if any(word in prompt_lower for word in ["hello", "hi", "hey", "start"]):
+        greetings = [
+            f"Hello! 📚 Ready to tackle some {subject} today? I'm here to help!",
+            f"Hey there, scholar! 🎓 What {subject} topic shall we explore?",
+            f"Hi! Let's make {subject} easier together. What do you need help with?"
         ]
-        return random.choice(jokes)
+        return random.choice(greetings)
     
-    elif any(word in prompt_lower for word in ["help", "what can you do", "capabilities"]):
-        return """I can help you with:
-        
-• Answering general questions 💬
-• Providing creative ideas 💡
-• Explaining concepts 📚
-• Having engaging conversations 🗨️
-• Telling jokes 😄
-• And much more!
+    # Homework help
+    elif any(word in prompt_lower for word in ["homework", "assignment", "problem"]):
+        return """I'm here to help with your homework! 📝
 
-Just ask me anything, and I'll do my best to assist!"""
+Here's how we can work together:
+
+1. **Explain the problem** - Tell me what you're working on
+2. **Show your work** - Share what you've tried so far
+3. **Ask specific questions** - Where are you getting stuck?
+
+Remember: I'll guide you through the solution rather than just giving you the answer. This helps you learn! 💡
+
+What specific homework problem are you working on?"""
     
-    elif any(word in prompt_lower for word in ["python", "programming", "code", "streamlit"]):
-        return "Ah, a fellow developer! 💻 Python and Streamlit are incredible tools for building interactive apps. Need help with a specific coding question?"
+    # Exam preparation
+    elif any(word in prompt_lower for word in ["exam", "test", "quiz", "prepare", "study"]):
+        return """Let's prepare for your exam! 📖
+
+**Effective Study Strategy:**
+
+• **Review Key Concepts** - Go through main topics first
+• **Practice Problems** - Work through sample questions
+• **Create Summaries** - Make notes in your own words
+• **Test Yourself** - Use flashcards or practice tests
+• **Study in Chunks** - Take breaks every 25-30 minutes
+
+What subject is your exam on? I can help you create a study plan or quiz you on the material!"""
     
-    elif any(word in prompt_lower for word in ["time", "date", "day"]):
-        now = datetime.now()
-        return f"The current time is {now.strftime('%H:%M:%S')} on {now.strftime('%B %d, %Y')} ⏰"
+    # Mathematics help
+    elif any(word in prompt_lower for word in ["math", "calculate", "equation", "algebra", "geometry", "calculus"]):
+        return """Let's work on this math problem together! 🔢
+
+**Problem-Solving Steps:**
+
+1. **Understand** - What are we trying to find?
+2. **Plan** - What method or formula should we use?
+3. **Solve** - Work through step-by-step
+4. **Check** - Does our answer make sense?
+
+Tell me the specific problem, and I'll guide you through each step. Remember to show your work - it helps identify where you might need extra support!"""
     
-    elif any(word in prompt_lower for word in ["weather", "climate"]):
-        return "I don't have access to real-time weather data, but I'd recommend checking a weather service for accurate forecasts! ☀️🌧️"
+    # Science help
+    elif any(word in prompt_lower for word in ["science", "biology", "chemistry", "physics", "experiment"]):
+        return """Science questions are my favorite! 🔬
+
+I can help you with:
+
+• **Understanding concepts** - Breaking down complex ideas
+• **Lab work** - Understanding experiments and results
+• **Formulas & equations** - When and how to use them
+• **Real-world applications** - Why this matters
+
+What science topic are you studying? Let's explore it together!"""
     
+    # Writing help
+    elif any(word in prompt_lower for word in ["essay", "write", "writing", "paragraph", "paper"]):
+        return """Let's work on your writing! ✍️
+
+**Essay Writing Framework:**
+
+1. **Brainstorm** - Gather your ideas
+2. **Outline** - Organize your thoughts
+   - Introduction (hook + thesis)
+   - Body paragraphs (evidence + analysis)
+   - Conclusion (summary + impact)
+3. **Draft** - Write freely, edit later
+4. **Revise** - Improve clarity and flow
+5. **Proofread** - Fix grammar and spelling
+
+What type of writing assignment are you working on? What's your topic?"""
+    
+    # Programming help
+    elif any(word in prompt_lower for word in ["code", "programming", "python", "javascript", "debug"]):
+        return """Let's tackle this coding challenge! 💻
+
+**Debugging Strategy:**
+
+1. **Read the error message** - What is it telling you?
+2. **Check syntax** - Are there typos or missing characters?
+3. **Trace the logic** - Walk through your code line by line
+4. **Test small pieces** - Break down the problem
+5. **Use print statements** - See what's happening
+
+Share your code or describe the problem, and we'll debug it together!"""
+    
+    # Study tips
+    elif any(word in prompt_lower for word in ["tip", "how to study", "learn better", "focus"]):
+        return """Here are proven study techniques! 🎯
+
+**Study Smart, Not Just Hard:**
+
+• **Pomodoro Technique** - 25 min focus, 5 min break
+• **Active Recall** - Test yourself instead of re-reading
+• **Spaced Repetition** - Review material over time
+• **Teach Someone** - Explaining helps you understand
+• **Remove Distractions** - Phone away, focused environment
+• **Stay Healthy** - Sleep, exercise, and eat well
+
+Which study technique would you like to try first?"""
+    
+    # Time management
+    elif any(word in prompt_lower for word in ["schedule", "time", "manage", "organize", "plan"]):
+        return """Let's create a study schedule! 📅
+
+**Time Management Tips:**
+
+• **Prioritize tasks** - Urgent vs Important
+• **Set specific goals** - "Read Chapter 5" not "Study biology"
+• **Use a planner** - Digital or paper, whatever works
+• **Break big tasks** - Into smaller, manageable chunks
+• **Build in buffer time** - Things take longer than expected
+
+What assignments or exams do you have coming up? I can help you plan!"""
+    
+    # Motivation
+    elif any(word in prompt_lower for word in ["tired", "stressed", "difficult", "hard", "give up", "can't"]):
+        return """I know studying can be tough, but you've got this! 💪
+
+**Remember:**
+
+• Every expert was once a beginner
+• Mistakes are part of learning
+• Taking breaks is productive, not lazy
+• Progress > Perfection
+• You're capable of more than you think!
+
+Take a deep breath. Break the problem into smaller steps. What specific part is challenging you? Let's tackle it together, one step at a time. 🌟"""
+    
+    # Quiz mode
+    elif mode == "quiz_me" or "quiz" in prompt_lower:
+        quiz_topics = {
+            "Mathematics": "algebra, geometry, or calculus",
+            "Science": "biology, chemistry, or physics concepts",
+            "English": "grammar, vocabulary, or literary devices",
+            "History": "important events and dates",
+            "Programming": "coding concepts and syntax"
+        }
+        topic = quiz_topics.get(subject, "general knowledge")
+        return f"Quiz mode activated! 🎯 I can quiz you on {topic}. What specific topic would you like to be quizzed on? Let me know and I'll create some practice questions for you!"
+    
+    # General questions
     elif "?" in prompt:
-        responses = [
-            "That's a great question! Let me think about that... 🤔",
-            "Interesting inquiry! Here's my perspective: " + random.choice([
-                "It depends on various factors and context.",
-                "There are multiple ways to approach this.",
-                "Let's break this down systematically."
-            ]),
-            "I appreciate your curiosity! " + personalities[personality]["unknown"]
-        ]
-        return random.choice(responses)
+        return f"Great question about {subject}! 🤔 Let me help you understand this better. Could you provide a bit more detail about what specifically you'd like to know? The more context you give, the better I can assist you!"
     
+    # Default response
     else:
-        return personalities[personality]["unknown"]
+        return f"""I'm here to help with your {subject} studies! 📚
+
+I can assist with:
+• Explaining difficult concepts
+• Solving problems step-by-step
+• Creating study plans
+• Preparing for exams
+• Checking your work
+• Providing study tips
+
+What would you like to work on today?"""
 
 # --- 6. TYPING ANIMATION EFFECT ---
 def stream_response(response_text):
-    """
-    Creates a typing animation effect for bot responses.
-    """
+    """Creates a typing animation effect for bot responses."""
     message_placeholder = st.empty()
     full_response = ""
     
     for chunk in response_text.split():
         full_response += chunk + " "
-        time.sleep(st.session_state.typing_speed)
+        time.sleep(0.02)
         message_placeholder.markdown(full_response + "▌")
     
     message_placeholder.markdown(full_response)
@@ -202,32 +351,43 @@ def stream_response(response_text):
 # --- 7. MAIN CHAT INTERFACE ---
 st.markdown("""
     <div class="chat-header">
-        <h1>🤖 AI Assistant Pro</h1>
-        <p>Your intelligent conversation partner</p>
+        <h1>📚 StudyBuddy AI</h1>
+        <p>Your Personal Study Assistant</p>
     </div>
 """, unsafe_allow_html=True)
 
+# Display current subject badge
+st.markdown(f'<span class="subject-badge">📖 Current: {st.session_state.current_subject}</span>', unsafe_allow_html=True)
+
 # Display welcome message if no chat history
 if len(st.session_state.messages) == 0:
-    with st.chat_message("assistant", avatar="🤖"):
-        st.markdown("""
-        👋 **Welcome!** I'm your AI Assistant Pro.
+    with st.chat_message("assistant", avatar="🎓"):
+        st.markdown(f"""
+        👋 **Welcome to StudyBuddy AI!**
         
-        I'm here to help answer questions, brainstorm ideas, or just chat. 
+        I'm your personal study assistant, here to help you:
         
-        *Try selecting different personalities in the sidebar!*
+        • 📝 Complete homework and assignments
+        • 📖 Prepare for exams
+        • 💡 Understand difficult concepts
+        • ✍️ Improve your writing
+        • 🎯 Stay organized and motivated
+        
+        **Current Subject:** {st.session_state.current_subject}
+        
+        *What would you like to work on today?*
         """)
 
 # Display all messages from session state
 for message in st.session_state.messages:
-    avatar = "🤖" if message["role"] == "assistant" else "👤"
+    avatar = "🎓" if message["role"] == "assistant" else "👤"
     with st.chat_message(message["role"], avatar=avatar):
         st.write(message["content"])
 
 # --- 8. HANDLE USER INPUT ---
-if prompt := st.chat_input("Type your message here..."):
-    # Increment conversation counter
-    st.session_state.conversation_count += 1
+if prompt := st.chat_input("Ask a question or describe what you need help with..."):
+    # Increment counters
+    st.session_state.questions_answered += 1
     
     # Store and display user message
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -235,10 +395,14 @@ if prompt := st.chat_input("Type your message here..."):
         st.write(prompt)
     
     # Generate and display bot response with typing effect
-    with st.chat_message("assistant", avatar="🤖"):
-        with st.spinner("Thinking..."):
-            time.sleep(0.5)  # Brief pause for realism
-            response = generate_response(prompt, st.session_state.bot_personality)
+    with st.chat_message("assistant", avatar="🎓"):
+        with st.spinner("Thinking... 💭"):
+            time.sleep(0.5)
+            response = generate_student_response(
+                prompt, 
+                st.session_state.current_subject,
+                st.session_state.study_mode
+            )
             displayed_response = stream_response(response)
     
     st.session_state.messages.append({"role": "assistant", "content": response})
