@@ -5,9 +5,9 @@ from datetime import datetime
 
 # --- 1. SET PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="StudyBuddy AI",
+    page_title="CBC Lesson Generator",
     page_icon="📚",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 
@@ -23,27 +23,45 @@ st.markdown("""
         padding: 10px;
         margin: 5px 0;
     }
-    .chat-header {
+    .header-banner {
         text-align: center;
-        padding: 20px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
+        padding: 30px;
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        border-radius: 15px;
         margin-bottom: 20px;
     }
     .stat-box {
-        background-color: #1e2127;
-        padding: 15px;
-        border-radius: 8px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+        border-radius: 10px;
         margin: 10px 0;
+        text-align: center;
     }
-    .subject-badge {
+    .grade-badge {
         display: inline-block;
-        padding: 5px 10px;
-        margin: 2px;
+        padding: 5px 15px;
+        margin: 5px;
+        border-radius: 20px;
+        background-color: #2a5298;
+        color: white;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    .subject-tag {
+        display: inline-block;
+        padding: 8px 16px;
+        margin: 5px;
         border-radius: 15px;
         background-color: #667eea;
         color: white;
-        font-size: 12px;
+        font-size: 13px;
+    }
+    .material-card {
+        background-color: #1e2127;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 10px 0;
+        border-left: 4px solid #667eea;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -52,357 +70,1054 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = []
     
-if "study_sessions" not in st.session_state:
-    st.session_state.study_sessions = 0
+if "materials_generated" not in st.session_state:
+    st.session_state.materials_generated = 0
     
-if "questions_answered" not in st.session_state:
-    st.session_state.questions_answered = 0
+if "current_grade" not in st.session_state:
+    st.session_state.current_grade = "Grade 4"
     
 if "current_subject" not in st.session_state:
-    st.session_state.current_subject = "General"
-    
-if "study_mode" not in st.session_state:
-    st.session_state.study_mode = "homework_help"
+    st.session_state.current_subject = "Mathematics"
 
-# --- 4. SIDEBAR CONFIGURATION ---
+if "material_type" not in st.session_state:
+    st.session_state.material_type = "worksheet"
+
+if "user_role" not in st.session_state:
+    st.session_state.user_role = "teacher"
+
+# --- 4. CBC CURRICULUM DATA ---
+CBC_SUBJECTS = {
+    "Lower Primary (Grade 1-3)": [
+        "Mathematics", "English", "Kiswahili", "Environmental Activities",
+        "Hygiene and Nutrition", "Religious Education", "Movement and Creative Activities"
+    ],
+    "Upper Primary (Grade 4-6)": [
+        "Mathematics", "English", "Kiswahili", "Science and Technology",
+        "Social Studies", "Religious Education", "Creative Arts", "Physical Education"
+    ],
+    "Junior Secondary (Grade 7-9)": [
+        "Mathematics", "English", "Kiswahili", "Integrated Science",
+        "Social Studies", "Religious Education", "Creative Arts and Sports",
+        "Pre-Technical Studies", "Business Studies", "Agriculture"
+    ]
+}
+
+MATERIAL_TYPES = {
+    "worksheet": "📝 Worksheet",
+    "lesson_plan": "📋 Lesson Plan",
+    "activity": "🎯 Learning Activity",
+    "assessment": "✅ Assessment Tool",
+    "flashcards": "🎴 Flashcards",
+    "project": "🔬 Project Guide",
+    "notes": "📖 Study Notes",
+    "quiz": "❓ Quiz/Test"
+}
+
+# --- 5. SIDEBAR CONFIGURATION ---
 with st.sidebar:
-    st.title("📚 Study Settings")
+    st.title("🎓 CBC Generator Settings")
     
-    # Study mode selector
-    st.session_state.study_mode = st.selectbox(
-        "Study Mode",
-        ["homework_help", "exam_prep", "concept_explanation", "quiz_me"],
-        format_func=lambda x: {
-            "homework_help": "📝 Homework Help",
-            "exam_prep": "📖 Exam Preparation",
-            "concept_explanation": "💡 Concept Explanation",
-            "quiz_me": "🎯 Quiz Me"
-        }[x]
+    # User role selector
+    st.session_state.user_role = st.radio(
+        "I am a:",
+        ["teacher", "student"],
+        format_func=lambda x: "👨‍🏫 Teacher" if x == "teacher" else "👨‍🎓 Student"
     )
     
-    # Subject selector
-    st.session_state.current_subject = st.selectbox(
-        "Current Subject",
-        ["General", "Mathematics", "Science", "English", "History", "Programming", "Languages"],
-        help="Select your current study subject"
-    )
-    
-    # Study statistics
     st.markdown("---")
-    st.markdown("### 📊 Study Stats")
+    
+    # Grade level selector
+    st.session_state.current_grade = st.selectbox(
+        "Grade Level",
+        ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", 
+         "Grade 7", "Grade 8", "Grade 9"],
+        index=3
+    )
+    
+    # Determine curriculum level
+    grade_num = int(st.session_state.current_grade.split()[1])
+    if grade_num <= 3:
+        curriculum_level = "Lower Primary (Grade 1-3)"
+    elif grade_num <= 6:
+        curriculum_level = "Upper Primary (Grade 4-6)"
+    else:
+        curriculum_level = "Junior Secondary (Grade 7-9)"
+    
+    # Subject selector based on grade
+    st.session_state.current_subject = st.selectbox(
+        "Subject",
+        CBC_SUBJECTS[curriculum_level]
+    )
+    
+    # Material type selector
+    st.session_state.material_type = st.selectbox(
+        "Material Type",
+        list(MATERIAL_TYPES.keys()),
+        format_func=lambda x: MATERIAL_TYPES[x]
+    )
+    
+    # Statistics
+    st.markdown("---")
+    st.markdown("### 📊 Generation Stats")
     
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"""
             <div class="stat-box">
-                <h3>🎓 {st.session_state.study_sessions}</h3>
-                <p>Study Sessions</p>
+                <h2>📚 {st.session_state.materials_generated}</h2>
+                <p>Materials Created</p>
             </div>
         """, unsafe_allow_html=True)
     
     with col2:
         st.markdown(f"""
             <div class="stat-box">
-                <h3>💬 {st.session_state.questions_answered}</h3>
-                <p>Questions Asked</p>
+                <h2>💬 {len(st.session_state.messages)//2}</h2>
+                <p>Requests Made</p>
             </div>
         """, unsafe_allow_html=True)
     
-    # Quick actions
+    # Quick action buttons
     st.markdown("---")
     st.markdown("### ⚡ Quick Actions")
-    
-    if st.button("🎯 Start Study Session", use_container_width=True):
-        st.session_state.study_sessions += 1
-        welcome_msg = f"Great! Let's start a {st.session_state.current_subject} study session. What would you like to work on?"
-        st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
-        st.rerun()
     
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
     
-    # Study tips and examples
+    if st.button("📥 Download Materials", use_container_width=True):
+        st.info("Download feature coming soon! Materials will be exportable as PDF/Word.")
+    
+    # Example prompts
     st.markdown("---")
-    st.markdown("### 💡 Example Questions")
+    st.markdown("### 💡 Example Requests")
     
     example_prompts = {
-        "Mathematics": [
-            "Help me solve quadratic equations",
-            "Explain calculus derivatives",
-            "How do I factor polynomials?"
+        "worksheet": [
+            f"Create a {st.session_state.current_subject} worksheet on fractions",
+            "Generate practice problems with word problems",
+            "Make an illustrated worksheet about shapes"
         ],
-        "Science": [
-            "Explain photosynthesis",
-            "What is Newton's third law?",
-            "Help me understand the periodic table"
+        "lesson_plan": [
+            f"Write a lesson plan for {st.session_state.current_subject}",
+            "Create a 40-minute lesson on photosynthesis",
+            "Plan a lesson with group activities"
         ],
-        "English": [
-            "Help me write an essay outline",
-            "Explain metaphors and similes",
-            "Grammar tips for better writing"
+        "activity": [
+            "Design a hands-on science experiment",
+            "Create a group learning activity",
+            "Make an interactive classroom game"
         ],
-        "Programming": [
-            "Explain Python loops",
-            "Help me debug my code",
-            "What are functions in programming?"
-        ],
-        "General": [
-            "Create a study schedule",
-            "Tips for better note-taking",
-            "How to prepare for exams"
+        "assessment": [
+            "Generate end of term exam questions",
+            "Create a formative assessment tool",
+            "Make a rubric for project evaluation"
         ]
     }
     
-    current_examples = example_prompts.get(st.session_state.current_subject, example_prompts["General"])
-    for prompt in current_examples:
+    current_examples = example_prompts.get(st.session_state.material_type, example_prompts["worksheet"])
+    for prompt in current_examples[:3]:
         if st.button(prompt, use_container_width=True, key=prompt):
             st.session_state.messages.append({"role": "user", "content": prompt})
             st.rerun()
 
-# --- 5. STUDENT-FOCUSED RESPONSE LOGIC ---
-def generate_student_response(prompt, subject, mode):
+# --- 6. CONTENT GENERATION LOGIC ---
+def generate_lesson_material(prompt, grade, subject, material_type, role):
     """
-    Generates educational responses tailored for students.
+    Generates CBC-aligned educational materials based on user input.
     """
     prompt_lower = prompt.lower()
     
-    # Greetings
+    # Greeting responses
     if any(word in prompt_lower for word in ["hello", "hi", "hey", "start"]):
-        greetings = [
-            f"Hello! 📚 Ready to tackle some {subject} today? I'm here to help!",
-            f"Hey there, scholar! 🎓 What {subject} topic shall we explore?",
-            f"Hi! Let's make {subject} easier together. What do you need help with?"
-        ]
-        return random.choice(greetings)
-    
-    # Homework help
-    elif any(word in prompt_lower for word in ["homework", "assignment", "problem"]):
-        return """I'm here to help with your homework! 📝
+        if role == "teacher":
+            return f"""👋 **Welcome, Teacher!**
 
-Here's how we can work together:
+I'm your CBC Lesson Material Generator. I can help you create:
 
-1. **Explain the problem** - Tell me what you're working on
-2. **Show your work** - Share what you've tried so far
-3. **Ask specific questions** - Where are you getting stuck?
+📝 **Worksheets** - Practice exercises with solutions
+📋 **Lesson Plans** - Structured 40-minute lessons
+🎯 **Activities** - Engaging hands-on learning
+✅ **Assessments** - Quizzes, tests, and rubrics
 
-Remember: I'll guide you through the solution rather than just giving you the answer. This helps you learn! 💡
+**Current Settings:**
+- Grade: {grade}
+- Subject: {subject}
+- Material: {MATERIAL_TYPES[material_type]}
 
-What specific homework problem are you working on?"""
-    
-    # Exam preparation
-    elif any(word in prompt_lower for word in ["exam", "test", "quiz", "prepare", "study"]):
-        return """Let's prepare for your exam! 📖
-
-**Effective Study Strategy:**
-
-• **Review Key Concepts** - Go through main topics first
-• **Practice Problems** - Work through sample questions
-• **Create Summaries** - Make notes in your own words
-• **Test Yourself** - Use flashcards or practice tests
-• **Study in Chunks** - Take breaks every 25-30 minutes
-
-What subject is your exam on? I can help you create a study plan or quiz you on the material!"""
-    
-    # Mathematics help
-    elif any(word in prompt_lower for word in ["math", "calculate", "equation", "algebra", "geometry", "calculus"]):
-        return """Let's work on this math problem together! 🔢
-
-**Problem-Solving Steps:**
-
-1. **Understand** - What are we trying to find?
-2. **Plan** - What method or formula should we use?
-3. **Solve** - Work through step-by-step
-4. **Check** - Does our answer make sense?
-
-Tell me the specific problem, and I'll guide you through each step. Remember to show your work - it helps identify where you might need extra support!"""
-    
-    # Science help
-    elif any(word in prompt_lower for word in ["science", "biology", "chemistry", "physics", "experiment"]):
-        return """Science questions are my favorite! 🔬
+What would you like me to create today?"""
+        else:
+            return f"""👋 **Hello, Student!**
 
 I can help you with:
 
-• **Understanding concepts** - Breaking down complex ideas
-• **Lab work** - Understanding experiments and results
-• **Formulas & equations** - When and how to use them
-• **Real-world applications** - Why this matters
+📖 Study materials for {subject}
+📝 Practice worksheets
+🎯 Learning activities
+💡 Topic explanations
 
-What science topic are you studying? Let's explore it together!"""
+What topic are you studying in {grade}?"""
     
-    # Writing help
-    elif any(word in prompt_lower for word in ["essay", "write", "writing", "paragraph", "paper"]):
-        return """Let's work on your writing! ✍️
+    # Worksheet generation
+    if material_type == "worksheet" or "worksheet" in prompt_lower:
+        topic = prompt_lower.replace("worksheet", "").replace("create", "").replace("generate", "").strip()
+        if not topic or len(topic) < 3:
+            topic = "the current topic"
+        
+        return f"""# 📝 {subject} Worksheet - {grade}
+### Topic: {topic.title()}
 
-**Essay Writing Framework:**
+---
 
-1. **Brainstorm** - Gather your ideas
-2. **Outline** - Organize your thoughts
-   - Introduction (hook + thesis)
-   - Body paragraphs (evidence + analysis)
-   - Conclusion (summary + impact)
-3. **Draft** - Write freely, edit later
-4. **Revise** - Improve clarity and flow
-5. **Proofread** - Fix grammar and spelling
+## **Part A: Understanding the Concept** (10 marks)
 
-What type of writing assignment are you working on? What's your topic?"""
+**Instructions:** Answer the following questions in the spaces provided.
+
+1. Define or explain what {topic} means in your own words.
+   
+   ____________________________________________________________
+   
+   ____________________________________________________________
+
+2. Give TWO real-life examples where you can observe or use {topic}.
+   
+   a) ____________________________________________________________
+   
+   b) ____________________________________________________________
+
+3. Why is understanding {topic} important? Write one reason.
+   
+   ____________________________________________________________
+
+---
+
+## **Part B: Practice Problems** (20 marks)
+
+**Instructions:** Solve the following problems. Show your working.
+
+**Question 1:** [Context-based problem related to {topic}]
+
+_Working space:_
+
+
+
+
+**Question 2:** [Progressive difficulty problem]
+
+_Working space:_
+
+
+
+
+**Question 3:** [Application problem using local context]
+
+_Working space:_
+
+
+
+
+---
+
+## **Part C: Challenge Section** (10 marks)
+
+**Critical Thinking:** 
+
+1. How would you explain {topic} to a younger student? Write a simple explanation.
+
+____________________________________________________________
+
+____________________________________________________________
+
+2. Create your own problem about {topic} using things from your environment.
+
+____________________________________________________________
+
+____________________________________________________________
+
+---
+
+## **Teacher's Notes:**
+
+✅ **Learning Outcomes:** Students will be able to:
+- Understand the concept of {topic}
+- Apply knowledge to solve problems
+- Make connections to real-life situations
+
+📊 **Assessment Criteria:**
+- Understanding: 10 marks
+- Problem-solving: 20 marks  
+- Critical thinking: 10 marks
+- **Total: 40 marks**
+
+🎯 **Differentiation:**
+- Support struggling learners with Part A
+- Challenge advanced learners with Part C
+- Use group work for collaborative learning
+
+---
+
+*Generated for {grade} - {subject} | CBC Aligned*
+"""
     
-    # Programming help
-    elif any(word in prompt_lower for word in ["code", "programming", "python", "javascript", "debug"]):
-        return """Let's tackle this coding challenge! 💻
+    # Lesson plan generation
+    elif material_type == "lesson_plan" or "lesson plan" in prompt_lower:
+        topic = prompt_lower.replace("lesson plan", "").replace("create", "").replace("write", "").strip()
+        if not topic or len(topic) < 3:
+            topic = "today's topic"
+        
+        return f"""# 📋 LESSON PLAN
+## {subject} - {grade}
 
-**Debugging Strategy:**
+---
 
-1. **Read the error message** - What is it telling you?
-2. **Check syntax** - Are there typos or missing characters?
-3. **Trace the logic** - Walk through your code line by line
-4. **Test small pieces** - Break down the problem
-5. **Use print statements** - See what's happening
+### **Topic:** {topic.title()}
+**Date:** ________________  
+**Duration:** 40 minutes  
+**Class Size:** _______
 
-Share your code or describe the problem, and we'll debug it together!"""
+---
+
+## **1. LEARNING OUTCOMES** 🎯
+
+By the end of the lesson, learners should be able to:
+- [ ] Explain the concept of {topic}
+- [ ] Apply knowledge to solve related problems
+- [ ] Demonstrate understanding through practical activities
+- [ ] Work collaboratively with peers
+
+**Specific Competencies Addressed:**
+- Communication and collaboration
+- Critical thinking and problem-solving
+- Learning to learn
+
+---
+
+## **2. LEARNING RESOURCES** 📚
+
+**Materials Needed:**
+- Textbooks/reference materials
+- Writing materials (pens, pencils, exercise books)
+- Manila papers/chart papers
+- [Specific materials for {topic}]
+- Locally available resources (e.g., stones, sticks, bottle tops)
+
+**Prerequisite Knowledge:**
+Students should have prior knowledge of [related foundational concepts]
+
+---
+
+## **3. LESSON STRUCTURE** ⏰
+
+### **Introduction (5 minutes)**
+- Greet learners and settle the class
+- Recap previous lesson briefly
+- Introduce today's topic: {topic}
+- Ask thought-provoking question: "Have you ever wondered about...?"
+- State learning objectives clearly
+
+### **Lesson Development (25 minutes)**
+
+**Activity 1: Teacher Explanation (8 minutes)**
+- Explain the concept of {topic} using simple language
+- Use examples from learners' environment
+- Draw diagrams or illustrations on the board
+- Ask questions to check understanding
+
+**Activity 2: Guided Practice (10 minutes)**
+- Demonstrate a problem/activity related to {topic}
+- Guide learners through solving similar problems
+- Move around the class to assist individuals
+- Encourage peer teaching
+
+**Activity 3: Group Activity (7 minutes)**
+- Divide class into groups of 4-5
+- Give each group a task related to {topic}
+- Provide materials for hands-on activity
+- Monitor group progress and participation
+
+### **Conclusion (10 minutes)**
+- Groups present their findings (2-3 groups)
+- Summarize key points of the lesson
+- Link back to learning objectives
+- Give homework/assignment
+- Preview next lesson
+
+---
+
+## **4. ASSESSMENT METHODS** ✅
+
+**Formative Assessment:**
+- Observation during group work
+- Oral questions throughout the lesson
+- Quick quiz at the end
+
+**Questions to Ask:**
+1. What have we learned about {topic}?
+2. Can someone give an example from our environment?
+3. How can we apply this in our daily lives?
+
+**Homework Assignment:**
+[Related practice exercise or project]
+
+---
+
+## **5. DIFFERENTIATION STRATEGIES** 🎨
+
+**For Struggling Learners:**
+- Provide additional visual aids
+- Pair with peer tutor
+- Give simpler problems
+- Offer more time
+
+**For Advanced Learners:**
+- Assign extension activities
+- Give leadership roles in groups
+- Provide challenging problems
+- Encourage independent research
+
+---
+
+## **6. REFLECTION** 💭
+
+**After the lesson, reflect on:**
+- Were learning outcomes achieved?
+- Which activities worked well?
+- What needs improvement?
+- Did all learners participate?
+- Time management effectiveness
+
+**Notes:**
+_____________________________________________________________
+
+_____________________________________________________________
+
+---
+
+*Prepared for {grade} - {subject} | CBC Aligned*
+*This lesson plan follows the Competency-Based Curriculum framework*
+"""
     
-    # Study tips
-    elif any(word in prompt_lower for word in ["tip", "how to study", "learn better", "focus"]):
-        return """Here are proven study techniques! 🎯
+    # Learning activity generation
+    elif material_type == "activity" or "activity" in prompt_lower:
+        topic = prompt_lower.replace("activity", "").replace("create", "").replace("design", "").strip()
+        if not topic or len(topic) < 3:
+            topic = "the current topic"
+        
+        return f"""# 🎯 LEARNING ACTIVITY
+## {subject} - {grade}
 
-**Study Smart, Not Just Hard:**
+---
 
-• **Pomodoro Technique** - 25 min focus, 5 min break
-• **Active Recall** - Test yourself instead of re-reading
-• **Spaced Repetition** - Review material over time
-• **Teach Someone** - Explaining helps you understand
-• **Remove Distractions** - Phone away, focused environment
-• **Stay Healthy** - Sleep, exercise, and eat well
+### **Activity Title:** Exploring {topic.title()}
+**Duration:** 30-40 minutes  
+**Group Size:** 4-5 learners per group
 
-Which study technique would you like to try first?"""
+---
+
+## **LEARNING OBJECTIVES** 🎓
+
+Learners will:
+1. Actively engage with concepts related to {topic}
+2. Collaborate with peers to solve problems
+3. Apply critical thinking skills
+4. Demonstrate understanding through hands-on work
+
+---
+
+## **MATERIALS NEEDED** 📦
+
+- Manila paper or chart paper (1 per group)
+- Markers/crayons/colored pencils
+- Exercise books for recording
+- [Specific items for {topic} - use local materials]
+- Examples: bottle tops, stones, seeds, sticks, newspapers
+
+---
+
+## **ACTIVITY INSTRUCTIONS** 📝
+
+### **Step 1: Introduction (5 minutes)**
+- Teacher explains the activity objectives
+- Demonstrate what students will do
+- Divide class into groups
+- Assign roles: Leader, Recorder, Presenter, Materials Manager
+
+### **Step 2: Main Activity (20-25 minutes)**
+
+**Task for Groups:**
+
+Your group will explore {topic} by:
+
+1. **Discuss** (5 minutes)
+   - What do you know about {topic}?
+   - Share ideas within your group
+   - Write down key points
+
+2. **Create/Experiment** (10-15 minutes)
+   - Use the materials provided
+   - Design a model/chart/experiment about {topic}
+   - Work together - everyone contributes!
+   - Record your observations
+
+3. **Prepare Presentation** (5 minutes)
+   - Organize your findings
+   - Choose who will present
+   - Practice explaining your work
+
+### **Step 3: Presentations (10 minutes)**
+- Each group presents (2-3 minutes per group)
+- Other groups ask questions
+- Teacher provides feedback
+
+---
+
+## **GUIDING QUESTIONS** ❓
+
+Help your group think about:
+- What did you discover about {topic}?
+- How does this relate to our daily lives?
+- What challenges did you face?
+- What would you do differently?
+- How can you use this knowledge?
+
+---
+
+## **ASSESSMENT CRITERIA** ✅
+
+Groups will be assessed on:
+
+| Criteria | Points |
+|----------|--------|
+| Participation of all members | 5 |
+| Understanding of {topic} | 5 |
+| Creativity and effort | 5 |
+| Presentation quality | 5 |
+| **Total** | **20** |
+
+---
+
+## **EXTENSION ACTIVITIES** 🌟
+
+**For Fast Finishers:**
+- Research more about {topic} using library books
+- Create a poster to display in class
+- Teach the concept to another student
+
+**Home Connection:**
+- Find examples of {topic} at home
+- Discuss with family members
+- Bring an item related to {topic} for next class
+
+---
+
+## **TEACHER NOTES** 📌
+
+**Preparation:**
+- Collect all materials before the lesson
+- Arrange classroom for group work
+- Prepare sample to show students
+
+**During Activity:**
+- Circulate and observe all groups
+- Ask probing questions
+- Assist struggling groups
+- Take photos for documentation
+
+**Safety Considerations:**
+- [List any safety rules relevant to the activity]
+
+**Differentiation:**
+- Provide extra support to groups that need it
+- Give more complex tasks to advanced learners
+- Allow different ways of presenting
+
+---
+
+*Activity designed for {grade} - {subject} | CBC Aligned*
+*Promotes hands-on learning and collaboration*
+"""
     
-    # Time management
-    elif any(word in prompt_lower for word in ["schedule", "time", "manage", "organize", "plan"]):
-        return """Let's create a study schedule! 📅
+    # Assessment/Quiz generation
+    elif material_type == "assessment" or material_type == "quiz" or any(word in prompt_lower for word in ["test", "exam", "quiz", "assessment"]):
+        topic = prompt_lower.replace("test", "").replace("quiz", "").replace("exam", "").replace("assessment", "").strip()
+        if not topic or len(topic) < 3:
+            topic = "term assessment"
+        
+        return f"""# ✅ ASSESSMENT TOOL
+## {subject} - {grade}
+### {topic.title()}
 
-**Time Management Tips:**
+---
 
-• **Prioritize tasks** - Urgent vs Important
-• **Set specific goals** - "Read Chapter 5" not "Study biology"
-• **Use a planner** - Digital or paper, whatever works
-• **Break big tasks** - Into smaller, manageable chunks
-• **Build in buffer time** - Things take longer than expected
+**Name:** ______________________________  **Date:** ______________
 
-What assignments or exams do you have coming up? I can help you plan!"""
+**Class:** ________  **Time Allowed:** 60 minutes
+
+**Total Marks:** 50
+
+---
+
+## **INSTRUCTIONS** 📋
+
+1. Answer ALL questions in the spaces provided
+2. Write your name and class clearly
+3. Show all your working
+4. Check your answers before submitting
+5. Write neatly and legibly
+
+---
+
+## **SECTION A: Multiple Choice** (10 marks)
+
+Choose the correct answer and write the letter in the brackets.
+
+1. Which of the following best describes {topic}?
+   - A) Option one
+   - B) Option two  
+   - C) Option three
+   - D) Option four
+   
+   Answer: [ ]
+
+2. [Question about {topic}]
+   - A) 
+   - B)
+   - C)
+   - D)
+   
+   Answer: [ ]
+
+3-10. [Continue with similar format]
+
+---
+
+## **SECTION B: Short Answer Questions** (15 marks)
+
+Answer the following questions briefly.
+
+1. Define {topic} in your own words. (3 marks)
+
+   ____________________________________________________________
+   
+   ____________________________________________________________
+   
+   ____________________________________________________________
+
+2. Give THREE examples of {topic} from your environment. (3 marks)
+   
+   a) ____________________________________________________________
+   
+   b) ____________________________________________________________
+   
+   c) ____________________________________________________________
+
+3. Explain why {topic} is important in our daily lives. (4 marks)
+
+   ____________________________________________________________
+   
+   ____________________________________________________________
+   
+   ____________________________________________________________
+   
+   ____________________________________________________________
+
+4. List TWO ways you can apply knowledge of {topic}. (2 marks)
+
+   a) ____________________________________________________________
+   
+   b) ____________________________________________________________
+
+5. What challenges might you face when dealing with {topic}? (3 marks)
+
+   ____________________________________________________________
+   
+   ____________________________________________________________
+
+---
+
+## **SECTION C: Problem Solving** (15 marks)
+
+Solve the following problems. Show ALL your working clearly.
+
+**Question 1:** (5 marks)
+
+[Context-based problem related to {topic}]
+
+_Working:_
+
+
+
+
+
+_Answer:_ ______________________
+
+**Question 2:** (5 marks)
+
+[Application problem using real-life scenario]
+
+_Working:_
+
+
+
+
+
+_Answer:_ ______________________
+
+**Question 3:** (5 marks)
+
+[Complex problem requiring critical thinking]
+
+_Working:_
+
+
+
+
+
+_Answer:_ ______________________
+
+---
+
+## **SECTION D: Extended Response** (10 marks)
+
+**Question:** Write a short paragraph explaining {topic}. Include:
+- What it is
+- Why it matters
+- How it's used
+- An example from your life
+
+Write at least 5-7 sentences.
+
+____________________________________________________________
+
+____________________________________________________________
+
+____________________________________________________________
+
+____________________________________________________________
+
+____________________________________________________________
+
+____________________________________________________________
+
+____________________________________________________________
+
+____________________________________________________________
+
+---
+
+## **MARKING SCHEME** (For Teacher Use)
+
+| Section | Marks | Student Score |
+|---------|-------|---------------|
+| Section A: Multiple Choice | 10 | |
+| Section B: Short Answer | 15 | |
+| Section C: Problem Solving | 15 | |
+| Section D: Extended Response | 10 | |
+| **TOTAL** | **50** | |
+
+**Grading Scale:**
+- 45-50: Exceeds Expectations
+- 35-44: Meets Expectations  
+- 25-34: Approaches Expectations
+- Below 25: Needs Support
+
+**Teacher Comments:**
+
+____________________________________________________________
+
+____________________________________________________________
+
+---
+
+*Assessment for {grade} - {subject} | CBC Aligned*
+*Covers knowledge, skills, and competencies*
+"""
     
-    # Motivation
-    elif any(word in prompt_lower for word in ["tired", "stressed", "difficult", "hard", "give up", "can't"]):
-        return """I know studying can be tough, but you've got this! 💪
+    # Flashcards generation
+    elif material_type == "flashcards" or "flashcard" in prompt_lower:
+        topic = prompt_lower.replace("flashcard", "").replace("create", "").strip()
+        if not topic or len(topic) < 3:
+            topic = "key concepts"
+        
+        return f"""# 🎴 FLASHCARDS SET
+## {subject} - {grade}
+### Topic: {topic.title()}
 
-**Remember:**
+---
 
-• Every expert was once a beginner
-• Mistakes are part of learning
-• Taking breaks is productive, not lazy
-• Progress > Perfection
-• You're capable of more than you think!
+**Instructions for Teachers:**
+1. Print these flashcards on cardstock
+2. Cut along the dotted lines
+3. Fold in half (question on front, answer on back)
+4. Laminate for durability (optional)
 
-Take a deep breath. Break the problem into smaller steps. What specific part is challenging you? Let's tackle it together, one step at a time. 🌟"""
+**Ways to Use:**
+- Individual study/revision
+- Pair work (students quiz each other)
+- Group games (quiz competitions)
+- Quick formative assessment
+
+---
+
+## 📇 FLASHCARD 1
+**FRONT (Question):**
+> What is {topic}?
+
+**BACK (Answer):**
+> [Clear, concise definition with example]
+
+---
+
+## 📇 FLASHCARD 2
+**FRONT (Question):**
+> Give an example of {topic} from your daily life.
+
+**BACK (Answer):**
+> [Real-world example relevant to Kenyan context]
+
+---
+
+## 📇 FLASHCARD 3
+**FRONT (Question):**
+> Why is {topic} important?
+
+**BACK (Answer):**
+> [2-3 reasons explaining significance]
+
+---
+
+## 📇 FLASHCARD 4
+**FRONT (Question):**
+> How do you [action related to {topic}]?
+
+**BACK (Answer):**
+> [Step-by-step process or method]
+
+---
+
+## 📇 FLASHCARD 5
+**FRONT (Question):**
+> What tools or materials do you need for {topic}?
+
+**BACK (Answer):**
+> [List of relevant materials/tools]
+
+---
+
+## 📇 FLASHCARD 6
+**FRONT (Question):**
+> Name TWO types or categories of {topic}.
+
+**BACK (Answer):**
+> 1. [Type one with brief description]
+> 2. [Type two with brief description]
+
+---
+
+## 📇 FLASHCARD 7
+**FRONT (Question):**
+> What is the difference between [A] and [B] in {topic}?
+
+**BACK (Answer):**
+> [Clear comparison highlighting key differences]
+
+---
+
+## 📇 FLASHCARD 8
+**FRONT (Question):**
+> Draw or describe [visual element related to {topic}]
+
+**BACK (Answer):**
+> [Description of expected drawing/diagram with labels]
+
+---
+
+## 📇 FLASHCARD 9
+**FRONT (Question):**
+> True or False: [Statement about {topic}]
+
+**BACK (Answer):**
+> [True/False with explanation why]
+
+---
+
+## 📇 FLASHCARD 10
+**FRONT (Question):**
+> Challenge: How can you apply {topic} to solve a problem in your community?
+
+**BACK (Answer):**
+> [Creative application showing higher-order thinking]
+
+---
+
+**BONUS ACTIVITY IDEAS:**
+
+🎯 **Memory Game:** Use two sets of flashcards. Place face down. Students find matching pairs.
+
+🏆 **Quiz Competition:** Divide class into teams. Teams earn points for correct answers.
+
+✏️ **Create Your Own:** Students make their own flashcards about {topic}.
+
+⏱️ **Speed Round:** How many can you answer in 2 minutes?
+
+---
+
+*Flashcards for {grade} - {subject} | Set of 10 cards*
+*Print, cut, and laminate for classroom use*
+"""
     
-    # Quiz mode
-    elif mode == "quiz_me" or "quiz" in prompt_lower:
-        quiz_topics = {
-            "Mathematics": "algebra, geometry, or calculus",
-            "Science": "biology, chemistry, or physics concepts",
-            "English": "grammar, vocabulary, or literary devices",
-            "History": "important events and dates",
-            "Programming": "coding concepts and syntax"
-        }
-        topic = quiz_topics.get(subject, "general knowledge")
-        return f"Quiz mode activated! 🎯 I can quiz you on {topic}. What specific topic would you like to be quizzed on? Let me know and I'll create some practice questions for you!"
+    # General help and guidance
+    elif "help" in prompt_lower or "how" in prompt_lower:
+        if role == "teacher":
+            return f"""# 💡 How to Use the CBC Lesson Generator
+
+I can create various learning materials for {grade} {subject}:
+
+## **Available Material Types:**
+
+### 📝 **Worksheets**
+Practice exercises with problems to solve. Great for homework or classwork.
+*Example: "Create a math worksheet on fractions for grade 4"*
+
+### 📋 **Lesson Plans**
+Complete 40-minute lesson plans following CBC format.
+*Example: "Write a lesson plan on photosynthesis"*
+
+### 🎯 **Learning Activities**
+Hands-on group activities and experiments.
+*Example: "Design a science experiment about plants"*
+
+### ✅ **Assessments**
+Tests, quizzes, and evaluation tools with marking schemes.
+*Example: "Generate an end-of-term test for science"*
+
+### 🎴 **Flashcards**
+Study cards for revision and quick practice.
+*Example: "Make flashcards for Kiswahili vocabulary"*
+
+### 📖 **Study Notes**
+Summaries and revision materials for students.
+*Example: "Create study notes on Kenyan history"*
+
+---
+
+## **Tips for Best Results:**
+
+1. **Be Specific:** Mention the exact topic you want
+   - ✅ "Create worksheet on adding fractions"
+   - ❌ "Create math worksheet"
+
+2. **Mention Grade Level:** (Already set in sidebar)
+   - Current: {grade}
+
+3. **Include Context:** Tell me about your students' needs
+   - "My students struggle with word problems"
+   - "I need visual aids for this topic"
+
+4. **Request Customization:**
+   - "Make it culturally relevant to Kenya"
+   - "Include local examples"
+   - "Add illustrations"
+
+---
+
+## **Sample Requests:**
+
+- "Create a worksheet on multiplication with Kenyan currency examples"
+- "Write a lesson plan about clean water with hands-on activities"
+- "Generate flashcards for English grammar - present tense"
+- "Make an assessment tool for science - states of matter"
+- "Design a group activity about healthy eating using local foods"
+
+---
+
+**What would you like me to create?**
+"""
+        else:
+            return f"""# 💡 How I Can Help You Learn
+
+Hi! I can help you study {subject} for {grade}. Here's what I can do:
+
+## **I Can Create:**
+
+📖 **Study Notes** - Summaries to help you understand topics better
+
+📝 **Practice Worksheets** - Problems to practice what you've learned
+
+🎴 **Flashcards** - Cards to help you memorize important facts
+
+💡 **Explanations** - Break down difficult concepts into simple terms
+
+---
+
+## **Just Tell Me:**
+
+1. What topic you're studying
+2. What you need help with
+3. What you find difficult
+
+**Examples:**
+- "I need help understanding fractions"
+- "Can you explain photosynthesis simply?"
+- "Make practice problems for multiplication"
+
+---
+
+What subject are you studying today?
+"""
     
-    # General questions
-    elif "?" in prompt:
-        return f"Great question about {subject}! 🤔 Let me help you understand this better. Could you provide a bit more detail about what specifically you'd like to know? The more context you give, the better I can assist you!"
-    
-    # Default response
+    # Default response with guidance
     else:
-        return f"""I'm here to help with your {subject} studies! 📚
+        material_name = MATERIAL_TYPES[material_type]
+        return f"""I'll help you create {material_name} for **{grade} {subject}**.
 
-I can assist with:
-• Explaining difficult concepts
-• Solving problems step-by-step
-• Creating study plans
-• Preparing for exams
-• Checking your work
-• Providing study tips
+To generate the best material, please tell me:
 
-What would you like to work on today?"""
+1. **Specific Topic:** What concept or subject area?
+   - Example: "Fractions", "Photosynthesis", "Kenyan Independence"
 
-# --- 6. TYPING ANIMATION EFFECT ---
+2. **Focus Area:** What should the material emphasize?
+   - Example: "Word problems", "Practical experiments", "Critical thinking"
+
+3. **Special Requirements:** (Optional)
+   - Difficulty level adjustments
+   - Cultural context (Kenyan examples)
+   - Specific learning outcomes
+   - Visual aids needed
+
+**Quick Example:**
+*"Create a worksheet on adding fractions with word problems using Kenyan currency examples"*
+
+What would you like me to create?"""
+
+# --- 7. TYPING ANIMATION ---
 def stream_response(response_text):
-    """Creates a typing animation effect for bot responses."""
+    """Creates a typing animation effect for responses."""
     message_placeholder = st.empty()
     full_response = ""
     
-    for chunk in response_text.split():
-        full_response += chunk + " "
-        time.sleep(0.02)
+    # Stream by chunks for better performance
+    words = response_text.split()
+    chunk_size = 3
+    
+    for i in range(0, len(words), chunk_size):
+        chunk = " ".join(words[i:i+chunk_size]) + " "
+        full_response += chunk
+        time.sleep(0.03)
         message_placeholder.markdown(full_response + "▌")
     
     message_placeholder.markdown(full_response)
     return full_response
 
-# --- 7. MAIN CHAT INTERFACE ---
+# --- 8. MAIN INTERFACE ---
 st.markdown("""
-    <div class="chat-header">
-        <h1>📚 StudyBuddy AI</h1>
-        <p>Your Personal Study Assistant</p>
+    <div class="header-banner">
+        <h1>📚 CBC Lesson Material Generator</h1>
+        <p>Create Localized Learning Materials Instantly</p>
     </div>
 """, unsafe_allow_html=True)
 
-# Display current subject badge
-st.markdown(f'<span class="subject-badge">📖 Current: {st.session_state.current_subject}</span>', unsafe_allow_html=True)
-
-# Display welcome message if no chat history
-if len(st.session_state.messages) == 0:
-    with st.chat_message("assistant", avatar="🎓"):
-        st.markdown(f"""
-        👋 **Welcome to StudyBuddy AI!**
-        
-        I'm your personal study assistant, here to help you:
-        
-        • 📝 Complete homework and assignments
-        • 📖 Prepare for exams
-        • 💡 Understand difficult concepts
-        • ✍️ Improve your writing
-        • 🎯 Stay organized and motivated
-        
-        **Current Subject:** {st.session_state.current_subject}
-        
-        *What would you like to work on today?*
-        """)
-
-# Display all messages from session state
-for message in st.session_state.messages:
-    avatar = "🎓" if message["role"] == "assistant" else "👤"
-    with st.chat_message(message["role"], avatar=avatar):
-        st.write(message["content"])
-
-# --- 8. HANDLE USER INPUT ---
-if prompt := st.chat_input("Ask a question or describe what you need help with..."):
-    # Increment counters
-    st.session_state.questions_answered += 1
-    
-    # Store and display user message
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user", avatar="👤"):
-        st.write(prompt)
-    
-    # Generate and display bot response with typing effect
-    with st.chat_message("assistant", avatar="🎓"):
-        with st.spinner("Thinking... 💭"):
-            time.sleep(0.5)
-            response = generate_student_response(
-                prompt, 
-                st.session_state.current_subject,
-                st.session_state.study_mode
-            )
-            displayed_response = stream_response(response)
-    
-    st.session_state.messages.append({"role": "assistant", "content": response})
+# Display current settings
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.markdown(f'<span
