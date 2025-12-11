@@ -1,22 +1,19 @@
 import streamlit as st
-from streamlit_chat import message # A commonly used component for chat bubbles
 import random
 import time
 
 # --- 1. SET PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Simple Streamlit Chatbot",
+    page_title="Streamlit Native Chatbot",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
 # --- 2. INITIALIZE SESSION STATE ---
-# Streamlit runs the script from top to bottom on every interaction.
-# st.session_state is necessary to preserve the chat history and other variables.
-if 'generated' not in st.session_state:
-    st.session_state['generated'] = ["Hello! I am a basic chatbot. Ask me something."] # Bot's responses
-if 'past' not in st.session_state:
-    st.session_state['past'] = ["Hi there!"] # User's inputs
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hello! I am a basic chatbot. Ask me something."}
+    ]
 
 # --- 3. BOT RESPONSE LOGIC ---
 def generate_response(prompt):
@@ -41,41 +38,33 @@ def generate_response(prompt):
         ]
         return random.choice(responses)
 
-# --- 4. MAIN APPLICATION INTERFACE ---
-st.title("Streamlit Chat Demo")
 
-# Create a container for the chat history
-response_container = st.container()
+# --- 4. DISPLAY CHAT HISTORY ---
+st.title("Streamlit Chat Demo (Native)")
 
-# Create a container for the user input
-input_container = st.container()
+# Display all messages from session state
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
 
-with input_container:
-    # Get user input
-    user_input = st.text_input("You: ", placeholder="Type your message here...", key="input")
+
+# --- 5. HANDLE USER INPUT ---
+if prompt := st.chat_input("Type your message here..."):
     
-    # Handle the submission
-    if st.button("Send", key="send_button") and user_input:
-        
-        # 1. Store user message
-        st.session_state.past.append(user_input)
-        
-        # Simulate thinking time
+    # 1. Store user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Display the user message immediately
+    with st.chat_message("user"):
+        st.write(prompt)
+
+    # 2. Generate and store bot response
+    with st.chat_message("assistant"):
         with st.spinner("Bot is thinking..."):
             time.sleep(0.5)
-            # 2. Generate and store bot response
-            output = generate_response(user_input)
-            st.session_state.generated.append(output)
+            response = generate_response(prompt)
+            st.write(response)
+        
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
-        # Force rerun to update chat history
-        st.rerun()
-
-# --- 5. DISPLAY CHAT HISTORY ---
-with response_container:
-    # Reverse the order to display newest message at the bottom
-    if st.session_state['generated']:
-        for i in range(len(st.session_state['generated']) - 1, -1, -1):
-            # Display bot message on the left (True)
-            message(st.session_state["generated"][i], key=str(i) + '_generated')
-            # Display user message on the right (False)
-            message(st.session_state['past'][i], is_user=True, key=str(i) + '_user')
+# Note: st.chat_input handles rerunning the app automatically.
